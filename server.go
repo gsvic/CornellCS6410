@@ -66,19 +66,19 @@ func main() {
       } else if input[0] == LIST_NODES {
         fmt.Println(nodes)
       } else if strings.ToLower(input) == LISTEN {
-        fmt.Println("Waiting for message...")
-        response, err := conn.Accept()
-        if err != nil {
-            fmt.Println("Error accepting: ", err.Error())
-            os.Exit(1)
-        } else {
-          go handleRequest(response)
-          fmt.Printf("Done\n")
-        }
+        // fmt.Println("Waiting for message...")
+        // response, err := conn.Accept()
+        // fmt.Println("Accepted")
+        // if err != nil {
+        //     fmt.Println("Error accepting: ", err.Error())
+        //     os.Exit(1)
+        // } else {
+        //   go handleRequest(response)
+        //   fmt.Printf("Done\n")
+        // }
+        go handleRequest(conn)
       } else if input == "conc" {
-        go sth("a")
-        go sth("b")
-        go sth("c")
+        go sth()
       } else if data, err := strconv.Atoi(input); err == nil {
       //data, _ := strconv.Atoi(input)
       fmt.Printf("%s:%s --> %d\n", CONN_HOST, port, data)
@@ -92,7 +92,7 @@ func main() {
             fmt.Println("error connecting to "+address)
             fmt.Println(err)
           } else {
-            fmt.Fprintf(ln, string(data))
+            fmt.Fprintf(ln, "hello from: "+port)
           }
       }
   }
@@ -107,26 +107,44 @@ func main() {
     }
 }
 
-func sth(str string) {
-    time.Sleep(2*time.Second)
-    fmt.Println()
-    fmt.Println(str)
-    fmt.Println()
+func sth() {
+    for true {
+      fmt.Println("\nI am running forever....")
+      fmt.Printf(">>>")
+      time.Sleep(5*time.Second)
+    }
+}
+
+func sth2() {
+    for true {
+      fmt.Println("\nI am running forever....")
+      fmt.Printf(">>>")
+      time.Sleep(5*time.Second)
+    }
 }
 
 // Handles incoming requests.
-func handleRequest(conn net.Conn) {
-  // Make a buffer to hold incoming data.
-  buf := make([]byte, 1024)
-  // Read the incoming connection into the buffer.
-  fmt.Println("Waiting for message...")
-  _, err := conn.Read(buf)
-  if err != nil {
-    fmt.Println("Error reading:", err.Error())
+func handleRequest(conn net.Listener) {
+  for true {
+    response, err := conn.Accept()
+    if err != nil {
+        fmt.Println("Error accepting: ", err.Error())
+        os.Exit(1)
+    }
+
+
+    // Make a buffer to hold incoming data.
+    buf := make([]byte, 1024)
+    // Read the incoming connection into the buffer.
+    fmt.Println("Waiting for message...")
+    _, err = response.Read(buf)
+    if err != nil {
+      fmt.Println("Error reading:", err.Error())
+    }
+    fmt.Printf("Received: %s\n>>>", string(buf))
+    // Send a response back to person contacting us.
+    //conn.Write([]byte("Message received."))
+    // Close the connection when you're done with it.
+    //conn.Close()
   }
-  fmt.Printf("Received: %s from %s\n", string(buf), conn)
-  // Send a response back to person contacting us.
-  //conn.Write([]byte("Message received."))
-  // Close the connection when you're done with it.
-  //conn.Close()
 }
