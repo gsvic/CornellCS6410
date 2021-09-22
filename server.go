@@ -1,14 +1,13 @@
 package main
 
 import (
-    "net"
-    "fmt"
-    "os"
     "bufio"
-    "strings"
+    "fmt"
+    "net"
+    "os"
     "strconv"
-    "time"
-  )
+    "strings"
+)
 
 const (
     CONN_HOST = "localhost"
@@ -17,12 +16,19 @@ const (
     LISTEN = "listen"
     ADD_NODES = '+'
     LIST_NODES = '?'
+
+    HI = "hi"
+    END_STR = "?EOF?"
 )
+
+type State struct {
+  data int
+}
 
 func main() {
     reader := bufio.NewReader(os.Stdin)
 
-    fmt.Printf("Enter the port of the node: ")
+    fmt.Printf("Enter the port number: ")
     port, _ := reader.ReadString('\n')
     port = port[:len(port)-1]
     nodes := make(map[string]int)
@@ -32,19 +38,10 @@ func main() {
         fmt.Println("Error listening:", err.Error())
         os.Exit(1)
     }
+
     fmt.Printf("Running node at %s:%s\n", CONN_HOST, port)
 
-    // fmt.Println("Listening on " + CONN_HOST + ":" + port)
-    // for {
-    //     // Listen for an incoming connection.
-    //     conn, err := l.Accept()
-    //     if err != nil {
-    //         fmt.Println("Error accepting: ", err.Error())
-    //         os.Exit(1)
-    //     }
-    //     // Handle connections in a new goroutine.
-    //     go handleRequest(conn)
-    // }
+    go Socket(conn, nodes)
 
     for true {
       fmt.Print(">>>")
@@ -55,7 +52,6 @@ func main() {
       }
 
       input = input[:len(input)-1]
-      //fmt.Printf("CMD: '%s'\n", input)
 
       if input[0] == ADD_NODES {
         split := strings.Split(input[1:], ":")
@@ -63,42 +59,24 @@ func main() {
         port := split[1]
         fmt.Printf("Node added[ip=%s, port=%s]\n", ip, port)
         nodes[input[1:]] = -1
+
+        /* Say hi to the new node */
+        ReportChange(CONN_HOST, port, "hi"+END_STR, ip+":"+port)
+
       } else if input[0] == LIST_NODES {
         fmt.Println(nodes)
-      } else if strings.ToLower(input) == LISTEN {
-        // fmt.Println("Waiting for message...")
-        // response, err := conn.Accept()
-        // fmt.Println("Accepted")
-        // if err != nil {
-        //     fmt.Println("Error accepting: ", err.Error())
-        //     os.Exit(1)
-        // } else {
-        //   go handleRequest(response)
-        //   fmt.Printf("Done\n")
-        // }
-        go handleRequest(conn)
-      } else if input == "conc" {
-        go sth()
       } else if data, err := strconv.Atoi(input); err == nil {
-      //data, _ := strconv.Atoi(input)
-      fmt.Printf("%s:%s --> %d\n", CONN_HOST, port, data)
+        fmt.Printf("%s:%s --> %d\n", CONN_HOST, port, data)
 
       // Send to the rest of the nodes
       for address, _ := range nodes {
-          fmt.Printf("Sending: %d to %s\n", data, address)
-          ln, err := net.Dial("tcp", address)
-
-          if err != nil {
-            fmt.Println("error connecting to "+address)
-            fmt.Println(err)
-          } else {
-            fmt.Fprintf(ln, "hello from: "+port)
-          }
+        ReportChange(CONN_HOST, port, input, address)
       }
   }
 
       // Check if exit
       if strings.ToLower(input) == "exit" {
+        conn.Close()
         fmt.Println("Bye!")
         return;
       }
@@ -107,24 +85,24 @@ func main() {
     }
 }
 
-func sth() {
-    for true {
-      fmt.Println("\nI am running forever....")
-      fmt.Printf(">>>")
-      time.Sleep(5*time.Second)
+func ReportChange(src_host string, src_port string, data string,
+  dst_addr string) {
+
+    ln, err := net.Dial("tcp", dst_addr)
+
+    if err != nil {
+      fmt.Println("error connecting to "+dst_addr)
+      fmt.Println(err)
+    } else {
+      fmt.Printf("Sending: %s to %s of len: %d\n", data, dst_addr, data)
+      fmt.Fprintf(ln, "%s:%s:%s:",src_host,src_port,data)
     }
+
 }
 
-func sth2() {
-    for true {
-      fmt.Println("\nI am running forever....")
-      fmt.Printf(">>>")
-      time.Sleep(5*time.Second)
-    }
-}
-
-// Handles incoming requests.
-func handleRequest(conn net.Listener) {
+// Start socket
+func Socket(conn net.Listener, nodes map[string]int) {
+  fmt.Printf("\nTCP socket started\n>>>")
   for true {
     response, err := conn.Accept()
     if err != nil {
@@ -132,19 +110,32 @@ func handleRequest(conn net.Listener) {
         os.Exit(1)
     }
 
-
-    // Make a buffer to hold incoming data.
     buf := make([]byte, 1024)
-    // Read the incoming connection into the buffer.
-    fmt.Println("Waiting for message...")
+
     _, err = response.Read(buf)
     if err != nil {
       fmt.Println("Error reading:", err.Error())
     }
-    fmt.Printf("Received: %s\n>>>", string(buf))
-    // Send a response back to person contacting us.
-    //conn.Write([]byte("Message received."))
-    // Close the connection when you're done with it.
-    //conn.Close()
+    split := strings.Split(string(buf), END_STR)
+
+    // A new node said hi
+    if split[0] == HI {
+      ip := split[1]
+      port := split[2]
+      fmt.Printf("Node %s:%s says hi!\n>>>", ip, port)
+    } else {
+      ip := split[0]
+      port := split[1]
+      value := split[2]
+      //remote := response.RemoteAddr()
+
+      i64, err := strconv.Atoi(value)
+
+      if err != nil {
+        fmt.Println(err)
+      }
+
+      nodes[ip+":"+port] = int(i64)
+    }
   }
 }
