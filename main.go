@@ -6,12 +6,14 @@ import (
 )
 
 import (
+	"flag"
 	"bufio"
 	"fmt"
 	"net"
 	"os"
 	"strconv"
 	"strings"
+	"math/rand"
 )
 
 const (
@@ -28,21 +30,24 @@ const (
 )
 
 func main() {
+	port := flag.Int("port", RandNum(), "Port Number")
+	flag.Parse()
+
+	strPort := strconv.Itoa(*port)
+
 	reader := bufio.NewReader(os.Stdin)
 
 	fmt.Printf("Enter the port number: ")
-	port, _ := reader.ReadString('\n')
-	port = port[:len(port)-1]
 
-	nodeCtx := server.New(CONN_HOST, port)
+	nodeCtx := server.New(CONN_HOST, strPort)
 
-	conn, err := net.Listen(CONN_TYPE, CONN_HOST+":"+port)
-	if err != nil {
-		fmt.Println("Error listening:", err.Error())
-		os.Exit(1)
+	conn, err := net.Listen(CONN_TYPE, CONN_HOST+":"+strPort)
+	for err != nil {
+		strPort = strconv.Itoa(RandNum())
+		conn, err = net.Listen(CONN_TYPE, CONN_HOST+":"+strPort)
 	}
 
-	fmt.Printf("Running node at %s:%s\n", CONN_HOST, port)
+	fmt.Printf("Running node at %s:%s\n", CONN_HOST, strPort)
 
 	go server.Socket(conn, nodeCtx)
 
@@ -73,13 +78,9 @@ func main() {
 		} else if data, err := strconv.Atoi(input); err == nil {
 			(*nodeCtx.Data).Data = data
 			(*nodeCtx.Data).Ts = time.Now().Unix()
-			fmt.Printf("%s:%s --> %d\n", CONN_HOST, port, server.GetData(nodeCtx))
-			// Send to the rest of the nodes
-			for address, _ := range server.GetNodeMap(nodeCtx) {
-				server.ReportState(nodeCtx, address)
-			}
+			fmt.Printf("%s:%s --> %d\n", CONN_HOST, strPort, (*nodeCtx.Data).Data)
 		} else if input[0] ==  DATA {
-			fmt.Printf("My Data -> %d\n", server.GetData(nodeCtx))
+			fmt.Printf("My Data -> %d\n", (*nodeCtx.Data).Data)
 		}
 
 		// Check if exit
@@ -90,4 +91,11 @@ func main() {
 		}
 
 	}
+}
+
+func RandNum() int {
+	rand.Seed(time.Now().UnixNano())
+	min := 1024
+	max := 49151
+	return rand.Intn(max - min + 1) + min
 }

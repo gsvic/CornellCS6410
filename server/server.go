@@ -101,8 +101,6 @@ func Socket(conn net.Listener, state NodeContext) NodeContext {
 	return state
 }
 
-
-
 func SendMsg(nodeCtx NodeContext, msg string, dst_addr string) {
 	ln, err := net.Dial("tcp", dst_addr)
 
