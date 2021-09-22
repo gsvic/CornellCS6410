@@ -12,7 +12,7 @@ type NodeContext struct {
 	hostname string
 	port string
 	Data *Pair
-	Nodes map[string]Pair
+	Nodes map[string]*Pair
 }
 
 type Pair struct {
@@ -25,11 +25,13 @@ func CreatePair(data int, ts int64) Pair {
 }
 
 func New(hostname string, port string) NodeContext {
-	return NodeContext{hostname, port, new(Pair), make(map[string]Pair)}
+	return NodeContext{hostname, port, new(Pair), make(map[string]*Pair)}
 }
 
 func ListNodes(nodeCtx NodeContext) {
-	fmt.Println(nodeCtx.Nodes)
+	for addr, data := range nodeCtx.Nodes {
+		fmt.Printf("%s --> %d\n", addr, data)
+	}
 }
 
 //func SetData(nodeCtx NodeContext, data int) {
@@ -40,11 +42,10 @@ func GetData(nodeCtx NodeContext) Pair {
 	return *nodeCtx.Data
 }
 
-func GetNodeMap(ctx NodeContext) map[string]Pair {
+func GetNodeMap(ctx NodeContext) map[string]*Pair {
 	return ctx.Nodes
 }
 
-// Start socket
 func Socket(conn net.Listener, state NodeContext) NodeContext {
 	fmt.Printf("\nTCP socket started\n>>>")
 	for true {
@@ -81,9 +82,9 @@ func Socket(conn net.Listener, state NodeContext) NodeContext {
 
 		//fmt.Printf("Updating node %s:%s value with %d\n>>>", ip, port, i64)
 		if _, ok := state.Nodes[ip+":"+port]; ok {
-			state.Nodes[ip+":"+port] = Pair{val, ts}
+			state.Nodes[ip+":"+port] = &Pair{val, ts}
 		} else {
-			state.Nodes[ip+":"+port] = Pair{val, ts}
+			state.Nodes[ip+":"+port] = &Pair{val, ts}
 			ReportState(state, ip+":"+port)
 		}
 
