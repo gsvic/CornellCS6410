@@ -28,9 +28,18 @@ func New(hostname string, port string) NodeContext {
 	return NodeContext{hostname, port, new(Pair), make(map[string]*Pair)}
 }
 
-func ListNodes(nodeCtx NodeContext) {
+func ListNodes(nodeCtx NodeContext, debug bool) {
+	fmt.Printf("%s:%s --> %d", nodeCtx.hostname, nodeCtx.port, (*nodeCtx.Data).Data)
+	if debug {
+		fmt.Printf(", %d", (*nodeCtx.Data).Ts)
+	}
+	fmt.Println()
 	for addr, data := range nodeCtx.Nodes {
-		fmt.Printf("%s --> %d\n", addr, data)
+		fmt.Printf("%s --> %d", addr, data.Data)
+		if debug {
+			fmt.Printf(", %d", data.Ts)
+		}
+		fmt.Println()
 	}
 }
 

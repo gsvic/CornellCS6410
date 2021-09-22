@@ -21,6 +21,7 @@ const (
 	DATA     = 'd'
 	ADD_NODES  = '+'
 	LIST_NODES = '?'
+	LIST_NODES_DEBUG = '!'
 
 	HI      = "hi"
 	END_STR = ":"
@@ -66,7 +67,9 @@ func main() {
 			server.ReportState(nodeCtx, ip+":"+port)
 
 		} else if input[0] == LIST_NODES {
-			server.ListNodes(nodeCtx)
+			server.ListNodes(nodeCtx, false)
+		} else if input[0] == LIST_NODES_DEBUG {
+			server.ListNodes(nodeCtx, true)
 		} else if data, err := strconv.Atoi(input); err == nil {
 			(*nodeCtx.Data).Data = data
 			(*nodeCtx.Data).Ts = time.Now().Unix()
