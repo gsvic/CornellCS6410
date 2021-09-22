@@ -63,16 +63,17 @@ func main() {
 			//nodeCtx.nodes[input[1:]] = -1
 
 			/* Say hi to the new node */
-			server.SendMsg(nodeCtx, "hi"+END_STR, ip+":"+port)
+			server.ReportState(nodeCtx, ip+":"+port)
 
 		} else if input[0] == LIST_NODES {
 			server.ListNodes(nodeCtx)
 		} else if data, err := strconv.Atoi(input); err == nil {
-			*nodeCtx.Data = server.CreatePair(data, time.Now().Unix())
+			(*nodeCtx.Data).Data = data
+			(*nodeCtx.Data).Ts = time.Now().Unix()
 			fmt.Printf("%s:%s --> %d\n", CONN_HOST, port, server.GetData(nodeCtx))
 			// Send to the rest of the nodes
 			for address, _ := range server.GetNodeMap(nodeCtx) {
-				server.SendMsg(nodeCtx, input, address)
+				server.ReportState(nodeCtx, address)
 			}
 		} else if input[0] ==  DATA {
 			fmt.Printf("My Data -> %d\n", server.GetData(nodeCtx))

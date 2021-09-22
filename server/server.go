@@ -6,7 +6,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
 )
 
 type NodeContext struct {
@@ -17,8 +16,8 @@ type NodeContext struct {
 }
 
 type Pair struct {
-	data int
-	ts int64
+	Data int
+	Ts int64
 }
 
 func CreatePair(data int, ts int64) Pair {
@@ -61,27 +60,33 @@ func Socket(conn net.Listener, state NodeContext) NodeContext {
 		if err != nil {
 			fmt.Println("Error reading:", err.Error())
 		}
-		split := strings.Split(string(buf), ":")
+		csv := strings.Split(strings.Split(string(buf), "\n")[0], ",")
 
-		ip := split[0]
-		port := split[1]
-		value := split[2]
-		//remote := response.RemoteAddr()
+		ip := strings.Split(csv[0],":")[0]
+		port := strings.Split(csv[0],":")[1]
+		value := csv[1]
+		timestamp := csv[2]
+		
+		val, err := strconv.Atoi(value)
 
-		// A new node said hi
-		if value == "hi" {
-			fmt.Printf("Node %s:%s says hi! Let's update it with %d\n>>>", ip, port, state.Data)
-			SendMsg(state, strconv.Itoa((*state.Data).data), ip+":"+port)
-		} else {
-			i64, err := strconv.Atoi(value)
-
-			if err != nil {
-				fmt.Println(err)
-			}
-
-			fmt.Printf("Updating node %s:%s value with %d\n>>>", ip, port, i64)
-			state.Nodes[ip+":"+port] = Pair{i64, time.Now().Unix()}
+		if err != nil {
+			fmt.Println(err)
 		}
+
+		ts, err := strconv.ParseInt(timestamp, 10, 64)
+
+		if err != nil {
+			fmt.Println(err)
+		}
+
+		//fmt.Printf("Updating node %s:%s value with %d\n>>>", ip, port, i64)
+		if _, ok := state.Nodes[ip+":"+port]; ok {
+			state.Nodes[ip+":"+port] = Pair{val, ts}
+		} else {
+			state.Nodes[ip+":"+port] = Pair{val, ts}
+			ReportState(state, ip+":"+port)
+		}
+
 	}
 	return state
 }
@@ -96,6 +101,18 @@ func SendMsg(nodeCtx NodeContext, msg string, dst_addr string) {
 		fmt.Println(err)
 	} else {
 		fmt.Fprintf(ln, "%s:%s:%s:", nodeCtx.hostname, nodeCtx.port, msg)
+	}
+
+}
+
+func ReportState(nodeCtx NodeContext, dst_addr string) {
+	ln, err := net.Dial("tcp", dst_addr)
+
+	if err != nil {
+		fmt.Println("error connecting to " + dst_addr)
+		fmt.Println(err)
+	} else {
+		fmt.Fprintf(ln, "%s:%s,%d,%d\n", nodeCtx.hostname, nodeCtx.port, nodeCtx.Data.Data, nodeCtx.Data.Ts)
 	}
 
 }
