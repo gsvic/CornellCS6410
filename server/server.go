@@ -2,10 +2,17 @@ package server
 
 import (
 	"fmt"
+	"math/rand"
 	"net"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
+	"time"
+)
+
+const (
+	PULL = "pull"
 )
 
 type NodeContext struct {
@@ -20,12 +27,16 @@ type Pair struct {
 	Ts int64
 }
 
-func CreatePair(data int, ts int64) Pair {
-	return Pair{data, ts}
+func CreateNodeContext(hostname string, port string) NodeContext {
+	return NodeContext{hostname, port, new(Pair), make(map[string]*Pair)}
 }
 
-func New(hostname string, port string) NodeContext {
-	return NodeContext{hostname, port, new(Pair), make(map[string]*Pair)}
+func GetValue(ctx NodeContext) int {
+	return (*ctx.Data).Data
+}
+
+func GetTs(ctx NodeContext) int64 {
+	return (*ctx.Data).Ts
 }
 
 func ListNodes(nodeCtx NodeContext, debug bool) {
@@ -43,19 +54,7 @@ func ListNodes(nodeCtx NodeContext, debug bool) {
 	}
 }
 
-//func SetData(nodeCtx NodeContext, data int) {
-//	*nodeCtx.Data = data
-//}
-
-func GetData(nodeCtx NodeContext) Pair {
-	return *nodeCtx.Data
-}
-
-func GetNodeMap(ctx NodeContext) map[string]*Pair {
-	return ctx.Nodes
-}
-
-func Socket(conn net.Listener, state NodeContext) NodeContext {
+func ConnectionHandler(conn net.Listener, nodeCtx NodeContext) NodeContext {
 	fmt.Printf("\nTCP socket started\n>>>")
 	for true {
 		response, err := conn.Accept()
@@ -70,45 +69,61 @@ func Socket(conn net.Listener, state NodeContext) NodeContext {
 		if err != nil {
 			fmt.Println("Error reading:", err.Error())
 		}
-		csv := strings.Split(strings.Split(string(buf), "\n")[0], ",")
 
-		ip := strings.Split(csv[0],":")[0]
-		port := strings.Split(csv[0],":")[1]
-		value := csv[1]
-		timestamp := csv[2]
-		
-		val, err := strconv.Atoi(value)
+		strBuf := string(buf)
 
-		if err != nil {
-			fmt.Println(err)
+		if strings.Contains(strBuf, PULL) {
+			split := strings.Split(strBuf, ":")
+			ip := split[1]
+			port := strings.Split(split[2], "\n")[0]
+			ReportState(nodeCtx, fmt.Sprintf("%s:%s", ip, port))
+
+			continue
 		}
 
-		ts, err := strconv.ParseInt(timestamp, 10, 64)
+		nodes := strings.Split(string(buf), "\n")
+		nodes = nodes[:len(nodes)-1]
 
-		if err != nil {
-			fmt.Println(err)
+		for _, node := range nodes {
+			csv := strings.Split(node, ",")
+
+			ip := strings.Split(csv[0], ":")[0]
+			port := strings.Split(csv[0], ":")[1]
+
+			if ip == nodeCtx.hostname && port == nodeCtx.port {
+				continue
+			}
+
+			value := csv[1]
+			timestamp := csv[2]
+
+			val, err := strconv.Atoi(value)
+
+			if err != nil {
+				fmt.Println(err)
+			}
+
+			ts, err := strconv.ParseInt(timestamp, 10, 64)
+
+			if err != nil {
+				fmt.Println(err)
+			}
+
+			//fmt.Printf("Updating node %s:%s value with %d\n>>>", ip, port, i64)
+			nodeCtx.Nodes[ip+":"+port] = &Pair{val, ts}
 		}
-
-		//fmt.Printf("Updating node %s:%s value with %d\n>>>", ip, port, i64)
-		if _, ok := state.Nodes[ip+":"+port]; ok {
-			state.Nodes[ip+":"+port] = &Pair{val, ts}
-		} else {
-			state.Nodes[ip+":"+port] = &Pair{val, ts}
-			ReportState(state, ip+":"+port)
-		}
-
 	}
-	return state
+	return nodeCtx
 }
 
-func SendMsg(nodeCtx NodeContext, msg string, dst_addr string) {
+func SendPullRequest(nodeCtx NodeContext, dst_addr string) {
 	ln, err := net.Dial("tcp", dst_addr)
 
 	if err != nil {
 		fmt.Println("error connecting to " + dst_addr)
 		fmt.Println(err)
 	} else {
-		fmt.Fprintf(ln, "%s:%s:%s:", nodeCtx.hostname, nodeCtx.port, msg)
+		fmt.Fprintf(ln, "pull:%s:%s\n", nodeCtx.hostname, nodeCtx.port)
 	}
 
 }
@@ -120,7 +135,28 @@ func ReportState(nodeCtx NodeContext, dst_addr string) {
 		fmt.Println("error connecting to " + dst_addr)
 		fmt.Println(err)
 	} else {
-		fmt.Fprintf(ln, "%s:%s,%d,%d\n", nodeCtx.hostname, nodeCtx.port, nodeCtx.Data.Data, nodeCtx.Data.Ts)
+		outString := fmt.Sprintf("%s:%s,%d,%d\n", nodeCtx.hostname, nodeCtx.port, GetValue(nodeCtx), GetTs(nodeCtx))
+		for address, data := range nodeCtx.Nodes {
+			str := fmt.Sprintf("%s,%d,%d\n", address, data.Data, data.Ts)
+			outString = outString + str
+		}
+
+		fmt.Fprintf(ln, outString)
+	}
+}
+
+func RandomPull(nodeCtx NodeContext) {
+	for true {
+		addresses := reflect.ValueOf(nodeCtx.Nodes).MapKeys()
+		randomIdx := rand.Intn(len(addresses))
+		randomAddress := addresses[randomIdx]
+		SendPullRequest(nodeCtx, randomAddress.String())
+		time.Sleep(5*time.Second)
 	}
 
+}
+
+func RandNum(min int, max int) int {
+	rand.Seed(time.Now().UnixNano())
+	return rand.Intn(max - min + 1) + min
 }

@@ -6,14 +6,13 @@ import (
 )
 
 import (
-	"flag"
 	"bufio"
+	"flag"
 	"fmt"
 	"net"
 	"os"
 	"strconv"
 	"strings"
-	"math/rand"
 )
 
 const (
@@ -30,7 +29,7 @@ const (
 )
 
 func main() {
-	port := flag.Int("port", RandNum(), "Port Number")
+	port := flag.Int("port", server.RandNum(1024, 49151), "Port Number")
 	flag.Parse()
 
 	strPort := strconv.Itoa(*port)
@@ -39,17 +38,19 @@ func main() {
 
 	fmt.Printf("Enter the port number: ")
 
-	nodeCtx := server.New(CONN_HOST, strPort)
+	nodeCtx := server.CreateNodeContext(CONN_HOST, strPort)
 
 	conn, err := net.Listen(CONN_TYPE, CONN_HOST+":"+strPort)
 	for err != nil {
-		strPort = strconv.Itoa(RandNum())
+		strPort = strconv.Itoa(server.RandNum(1024, 49151))
 		conn, err = net.Listen(CONN_TYPE, CONN_HOST+":"+strPort)
 	}
 
 	fmt.Printf("Running node at %s:%s\n", CONN_HOST, strPort)
 
-	go server.Socket(conn, nodeCtx)
+	go server.ConnectionHandler(conn, nodeCtx)
+
+	randomPullStarted := false
 
 	for true {
 		fmt.Print(">>>")
@@ -66,10 +67,16 @@ func main() {
 			ip := split[0]
 			port := split[1]
 			fmt.Printf("Node added[ip=%s, port=%s]\n", ip, port)
-			//nodeCtx.nodes[input[1:]] = -1
+			nodeCtx.Nodes[input[1:]] = &server.Pair{0, 0}
 
 			/* Say hi to the new node */
-			server.ReportState(nodeCtx, ip+":"+port)
+			//server.ReportState(nodeCtx, ip+":"+port)
+			server.SendPullRequest(nodeCtx, ip+":"+port)
+
+			if !randomPullStarted {
+				go server.RandomPull(nodeCtx)
+				randomPullStarted = true
+			}
 
 		} else if input[0] == LIST_NODES {
 			server.ListNodes(nodeCtx, false)
@@ -91,11 +98,4 @@ func main() {
 		}
 
 	}
-}
-
-func RandNum() int {
-	rand.Seed(time.Now().UnixNano())
-	min := 1024
-	max := 49151
-	return rand.Intn(max - min + 1) + min
 }
