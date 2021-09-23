@@ -45,8 +45,6 @@ func main() {
 	// Initialize the Node Context
 	nodeCtx := server.CreateNodeContext(CONN_HOST, strPort)
 
-	nodeCtx.Yo()
-
 	fmt.Printf("Running node at %s:%s\n", CONN_HOST, strPort)
 
 	// Start the ConnectionHandler
@@ -71,14 +69,14 @@ func main() {
 
 			addr := ip + ":" + port
 
-			if _, exists := nodeCtx.BlackList[addr]; exists && nodeCtx.BlackList[addr] {
+			if _, exists := nodeCtx.Blacklist[addr]; exists && nodeCtx.Blacklist[addr] {
 				fmt.Printf("Oops! Node %s is in blacklisted\n", addr)
 				continue
 			}
 
 			fmt.Printf("Node added[ip=%s, port=%s]\n", ip, port)
-			nodeCtx.Nodes[input[1:]] = &server.Pair{0, 0}
-			nodeCtx.BlackList[input[1:]] = false
+			nodeCtx.Nodes[input[1:]] = server.CreatePair(0, 0)
+			nodeCtx.Blacklist[input[1:]] = false
 
 			// Fetch the new node's state
 			server.SendPullRequest(nodeCtx, ip+":"+port)
@@ -96,11 +94,10 @@ func main() {
 		} else if input[0] == ENABLE_MALICIOUS_MODE {
 			nodeCtx.SetMalicious()
 		} else if data, err := strconv.Atoi(input); err == nil {
-			(*nodeCtx.Data).Data = data
-			(*nodeCtx.Data).Ts = time.Now().Unix()
-			fmt.Printf("%s:%s --> %d\n", CONN_HOST, strPort, (*nodeCtx.Data).Data)
+			nodeCtx.GetData().SetData(data).SetTs(time.Now().Unix())
+			fmt.Printf("%s:%s --> %d\n", CONN_HOST, strPort, nodeCtx.GetData().GetData())
 		} else if input[0] ==  DATA {
-			fmt.Printf("My Data -> %d\n", (*nodeCtx.Data).Data)
+			fmt.Printf("My Data -> %d\n", nodeCtx.GetData().GetData())
 		}
 
 		if strings.ToLower(input) == "exit" {

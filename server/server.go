@@ -20,53 +20,46 @@ const (
 type NodeContext struct {
 	hostname string
 	port string
-	Data *Pair
+	data *Pair
 	Nodes map[string]*Pair
-	BlackList map[string]bool
-	ismalicious *bool
+	Blacklist map[string]bool
+	malicious *bool
 
 	nodesMutex sync.Mutex
 	blackListMutex sync.Mutex
+
+	N int
 }
 
 // CreateNodeContext Creates a new NodeContext
 func CreateNodeContext(hostname string, port string) NodeContext {
-	return NodeContext{hostname: hostname, port: port, Data:new(Pair), Nodes:make(map[string]*Pair),
-		BlackList:make(map[string]bool), ismalicious: new(bool)}
-}
-func (ctx *NodeContext) Yo() {
-
+	return NodeContext{hostname: hostname, port: port, data:new(Pair), Nodes:make(map[string]*Pair),
+		Blacklist:make(map[string]bool), malicious: new(bool)}
 }
 
-// GetValue Get the value of a NodeContext
-func GetValue(ctx NodeContext) int {
-	return (*ctx.Data).Data
-}
-
-// GetTs Get the timestamp of a NodeContext
-func GetTs(ctx NodeContext) int64 {
-	return (*ctx.Data).Ts
+func (nodeCtx *NodeContext) GetData() *Pair {
+	return &(*nodeCtx.data)
 }
 
 func (ctx NodeContext) isMalicious() bool {
-	return *ctx.ismalicious
+	return *ctx.malicious
 }
 
 func (ctx NodeContext) SetMalicious() {
-	*ctx.ismalicious = true
+	*ctx.malicious = true
 }
 
 // ListNodes prints all the nodes of the given NodeContext instance to stdout
 func ListNodes(nodeCtx NodeContext, debug bool) {
-	fmt.Printf("%s:%s --> %d", nodeCtx.hostname, nodeCtx.port, (*nodeCtx.Data).Data)
+	fmt.Printf("%s:%s --> %d", nodeCtx.hostname, nodeCtx.port, nodeCtx.GetData().GetData())
 	if debug {
-		fmt.Printf(", %d", (*nodeCtx.Data).Ts)
+		fmt.Printf(", %d", nodeCtx.GetData().GetTs())
 	}
 	fmt.Println()
 	for addr, data := range nodeCtx.Nodes {
-		fmt.Printf("%s --> %d", addr, data.Data)
+		fmt.Printf("%s --> %d", addr, data.GetData())
 		if debug {
-			fmt.Printf(", %d", data.Ts)
+			fmt.Printf(", %d", data.GetTs())
 		}
 		fmt.Println()
 	}
@@ -76,7 +69,7 @@ func ListNodes(nodeCtx NodeContext, debug bool) {
 // In case of a pull request (the message starts with the substring "pull"), it sends its state
 // to the requester.
 func ConnectionHandler(conn net.Listener, nodeCtx NodeContext) NodeContext {
-	fmt.Printf("\nTCP socket started\n")
+	fmt.Printf("\nTCP socket started\n>>>")
 	for true {
 		response, err := conn.Accept()
 		if err != nil {
@@ -130,8 +123,12 @@ func ConnectionHandler(conn net.Listener, nodeCtx NodeContext) NodeContext {
 				fmt.Println(err)
 			}
 
-			//fmt.Printf("Updating node %s:%s value with %d\n>>>", ip, port, i64)
-			nodeCtx.Nodes[ip+":"+port] = &Pair{val, ts}
+			address := ip + ":" +port
+			if _, in := nodeCtx.Nodes[address] ; in {
+				nodeCtx.Nodes[address].SetData(val).SetTs(ts)
+			} else {
+				nodeCtx.Nodes[address] = CreatePair(val, ts)
+			}
 		}
 	}
 	return nodeCtx
@@ -146,7 +143,7 @@ func SendPullRequest(nodeCtx NodeContext, dst_addr string) {
 		fmt.Println(err)
 
 		// Put the address to the blacklist in case of failure
-		nodeCtx.BlackList[dst_addr] = true
+		nodeCtx.Blacklist[dst_addr] = true
 		delete(nodeCtx.Nodes, dst_addr)
 	} else {
 		fmt.Fprintf(ln, "pull:%s:%s\n", nodeCtx.hostname, nodeCtx.port)
@@ -163,7 +160,7 @@ func ReportState(nodeCtx NodeContext, dst_addr string) {
 		fmt.Println(err)
 
 		// Put the address to the blacklist in case of failure
-		nodeCtx.BlackList[dst_addr] = true
+		nodeCtx.Blacklist[dst_addr] = true
 		delete(nodeCtx.Nodes, dst_addr)
 	} else {
 		var ts int64
@@ -171,18 +168,18 @@ func ReportState(nodeCtx NodeContext, dst_addr string) {
 		if nodeCtx.isMalicious() {
 			ts = 0
 		} else {
-			ts = GetTs(nodeCtx)
+			ts = nodeCtx.GetData().GetTs()
 		}
 
-		outString := fmt.Sprintf("%s:%s,%d,%d\n", nodeCtx.hostname, nodeCtx.port, GetValue(nodeCtx),
+		outString := fmt.Sprintf("%s:%s,%d,%d\n", nodeCtx.hostname, nodeCtx.port, nodeCtx.GetData().GetData(),
 			ts)
 		for address, data := range nodeCtx.Nodes {
 			if nodeCtx.isMalicious() {
-				ts = 0
-			} else {
 				ts = time.Date(20100, 1, 1, 1, 1, 1, 1, time.Local).UnixNano()
+			} else {
+				ts = nodeCtx.GetData().GetTs()
 			}
-			str := fmt.Sprintf("%s,%d,%d\n", address, data.Data, ts)
+			str := fmt.Sprintf("%s,%d,%d\n", address, data.GetData(), ts)
 			outString = outString + str
 		}
 
