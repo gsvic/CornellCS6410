@@ -23,6 +23,10 @@ const (
 	ADD_NODES  = '+'
 	LIST_NODES = '?'
 	LIST_NODES_DEBUG = '!'
+
+	// ENABLE_MALICIOUS_MODE When this is enabled, the node will start sharing either
+	// very old updates (01/01/1970) or updates from the future (01/01/2100)
+	ENABLE_MALICIOUS_MODE = 'm'
 )
 
 func main() {
@@ -40,6 +44,8 @@ func main() {
 
 	// Initialize the Node Context
 	nodeCtx := server.CreateNodeContext(CONN_HOST, strPort)
+
+	nodeCtx.Yo()
 
 	fmt.Printf("Running node at %s:%s\n", CONN_HOST, strPort)
 
@@ -62,8 +68,17 @@ func main() {
 			split := strings.Split(input[1:], ":")
 			ip := split[0]
 			port := split[1]
+
+			addr := ip + ":" + port
+
+			if _, exists := nodeCtx.BlackList[addr]; exists && nodeCtx.BlackList[addr] {
+				fmt.Printf("Oops! Node %s is in blacklisted\n", addr)
+				continue
+			}
+
 			fmt.Printf("Node added[ip=%s, port=%s]\n", ip, port)
 			nodeCtx.Nodes[input[1:]] = &server.Pair{0, 0}
+			nodeCtx.BlackList[input[1:]] = false
 
 			// Fetch the new node's state
 			server.SendPullRequest(nodeCtx, ip+":"+port)
@@ -78,6 +93,8 @@ func main() {
 			server.ListNodes(nodeCtx, false)
 		} else if input[0] == LIST_NODES_DEBUG {
 			server.ListNodes(nodeCtx, true)
+		} else if input[0] == ENABLE_MALICIOUS_MODE {
+			nodeCtx.SetMalicious()
 		} else if data, err := strconv.Atoi(input); err == nil {
 			(*nodeCtx.Data).Data = data
 			(*nodeCtx.Data).Ts = time.Now().Unix()

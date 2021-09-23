@@ -8,11 +8,13 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
 const (
 	PULL = "pull"
+	RANDOM_PULL_FREQUENCY = 3 * time.Second
 )
 
 type NodeContext struct {
@@ -20,23 +22,38 @@ type NodeContext struct {
 	port string
 	Data *Pair
 	Nodes map[string]*Pair
+	BlackList map[string]bool
+	ismalicious *bool
+
+	nodesMutex sync.Mutex
+	blackListMutex sync.Mutex
 }
 
-type Pair struct {
-	Data int
-	Ts int64
-}
-
+// CreateNodeContext Creates a new NodeContext
 func CreateNodeContext(hostname string, port string) NodeContext {
-	return NodeContext{hostname, port, new(Pair), make(map[string]*Pair)}
+	return NodeContext{hostname: hostname, port: port, Data:new(Pair), Nodes:make(map[string]*Pair),
+		BlackList:make(map[string]bool), ismalicious: new(bool)}
+}
+func (ctx *NodeContext) Yo() {
+
 }
 
+// GetValue Get the value of a NodeContext
 func GetValue(ctx NodeContext) int {
 	return (*ctx.Data).Data
 }
 
+// GetTs Get the timestamp of a NodeContext
 func GetTs(ctx NodeContext) int64 {
 	return (*ctx.Data).Ts
+}
+
+func (ctx NodeContext) isMalicious() bool {
+	return *ctx.ismalicious
+}
+
+func (ctx NodeContext) SetMalicious() {
+	*ctx.ismalicious = true
 }
 
 // ListNodes prints all the nodes of the given NodeContext instance to stdout
@@ -59,7 +76,7 @@ func ListNodes(nodeCtx NodeContext, debug bool) {
 // In case of a pull request (the message starts with the substring "pull"), it sends its state
 // to the requester.
 func ConnectionHandler(conn net.Listener, nodeCtx NodeContext) NodeContext {
-	fmt.Printf("\nTCP socket started\n>>>")
+	fmt.Printf("\nTCP socket started\n")
 	for true {
 		response, err := conn.Accept()
 		if err != nil {
@@ -127,6 +144,10 @@ func SendPullRequest(nodeCtx NodeContext, dst_addr string) {
 	if err != nil {
 		fmt.Println("error connecting to " + dst_addr)
 		fmt.Println(err)
+
+		// Put the address to the blacklist in case of failure
+		nodeCtx.BlackList[dst_addr] = true
+		delete(nodeCtx.Nodes, dst_addr)
 	} else {
 		fmt.Fprintf(ln, "pull:%s:%s\n", nodeCtx.hostname, nodeCtx.port)
 	}
@@ -140,11 +161,28 @@ func ReportState(nodeCtx NodeContext, dst_addr string) {
 	if err != nil {
 		fmt.Println("error connecting to " + dst_addr)
 		fmt.Println(err)
+
+		// Put the address to the blacklist in case of failure
+		nodeCtx.BlackList[dst_addr] = true
+		delete(nodeCtx.Nodes, dst_addr)
 	} else {
+		var ts int64
+
+		if nodeCtx.isMalicious() {
+			ts = 0
+		} else {
+			ts = GetTs(nodeCtx)
+		}
+
 		outString := fmt.Sprintf("%s:%s,%d,%d\n", nodeCtx.hostname, nodeCtx.port, GetValue(nodeCtx),
-			GetTs(nodeCtx))
+			ts)
 		for address, data := range nodeCtx.Nodes {
-			str := fmt.Sprintf("%s,%d,%d\n", address, data.Data, data.Ts)
+			if nodeCtx.isMalicious() {
+				ts = 0
+			} else {
+				ts = time.Date(20100, 1, 1, 1, 1, 1, 1, time.Local).UnixNano()
+			}
+			str := fmt.Sprintf("%s,%d,%d\n", address, data.Data, ts)
 			outString = outString + str
 		}
 
@@ -155,11 +193,14 @@ func ReportState(nodeCtx NodeContext, dst_addr string) {
 // RandomPull sends a random pull request
 func RandomPull(nodeCtx NodeContext) {
 	for true {
-		addresses := reflect.ValueOf(nodeCtx.Nodes).MapKeys()
-		randomIdx := rand.Intn(len(addresses))
-		randomAddress := addresses[randomIdx]
-		SendPullRequest(nodeCtx, randomAddress.String())
-		time.Sleep(5*time.Second)
+		if len(nodeCtx.Nodes) > 0 {
+			addresses := reflect.ValueOf(nodeCtx.Nodes).MapKeys()
+			randomIdx := rand.Intn(len(addresses))
+			randomAddress := addresses[randomIdx]
+
+			SendPullRequest(nodeCtx, randomAddress.String())
+		}
+		time.Sleep(RANDOM_PULL_FREQUENCY)
 	}
 
 }

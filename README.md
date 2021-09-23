@@ -1,1 +1,10 @@
 # CornellCS6410
+
+A gossip protocol implementation for the CS 6410 course at Cornell CIS, offered at Fall 21'.
+
+# Instructions
+To start a server with a random port, simply run the following:
+`go run .`
+
+To start a server with a a user-defined port, run the following:
+`go run . -port=<PORT_NUMBER>`
