@@ -23,31 +23,27 @@ const (
 	ADD_NODES  = '+'
 	LIST_NODES = '?'
 	LIST_NODES_DEBUG = '!'
-
-	HI      = "hi"
-	END_STR = ":"
 )
 
 func main() {
 	port := flag.Int("port", server.RandNum(1024, 49151), "Port Number")
 	flag.Parse()
 
-	strPort := strconv.Itoa(*port)
-
 	reader := bufio.NewReader(os.Stdin)
 
-	fmt.Printf("Enter the port number: ")
-
-	nodeCtx := server.CreateNodeContext(CONN_HOST, strPort)
-
+	strPort := strconv.Itoa(*port)
 	conn, err := net.Listen(CONN_TYPE, CONN_HOST+":"+strPort)
 	for err != nil {
 		strPort = strconv.Itoa(server.RandNum(1024, 49151))
 		conn, err = net.Listen(CONN_TYPE, CONN_HOST+":"+strPort)
 	}
 
+	// Initialize the Node Context
+	nodeCtx := server.CreateNodeContext(CONN_HOST, strPort)
+
 	fmt.Printf("Running node at %s:%s\n", CONN_HOST, strPort)
 
+	// Start the ConnectionHandler
 	go server.ConnectionHandler(conn, nodeCtx)
 
 	randomPullStarted := false
@@ -69,10 +65,10 @@ func main() {
 			fmt.Printf("Node added[ip=%s, port=%s]\n", ip, port)
 			nodeCtx.Nodes[input[1:]] = &server.Pair{0, 0}
 
-			/* Say hi to the new node */
-			//server.ReportState(nodeCtx, ip+":"+port)
+			// Fetch the new node's state
 			server.SendPullRequest(nodeCtx, ip+":"+port)
 
+			// Start the random state pull if it has not started yet
 			if !randomPullStarted {
 				go server.RandomPull(nodeCtx)
 				randomPullStarted = true
@@ -90,7 +86,6 @@ func main() {
 			fmt.Printf("My Data -> %d\n", (*nodeCtx.Data).Data)
 		}
 
-		// Check if exit
 		if strings.ToLower(input) == "exit" {
 			conn.Close()
 			fmt.Println("Bye!")

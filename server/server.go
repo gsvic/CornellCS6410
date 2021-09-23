@@ -39,6 +39,7 @@ func GetTs(ctx NodeContext) int64 {
 	return (*ctx.Data).Ts
 }
 
+// ListNodes prints all the nodes of the given NodeContext instance to stdout
 func ListNodes(nodeCtx NodeContext, debug bool) {
 	fmt.Printf("%s:%s --> %d", nodeCtx.hostname, nodeCtx.port, (*nodeCtx.Data).Data)
 	if debug {
@@ -54,6 +55,9 @@ func ListNodes(nodeCtx NodeContext, debug bool) {
 	}
 }
 
+// The ConnectionHandler runs as an independent process that waits for input connections
+// In case of a pull request (the message starts with the substring "pull"), it sends its state
+// to the requester.
 func ConnectionHandler(conn net.Listener, nodeCtx NodeContext) NodeContext {
 	fmt.Printf("\nTCP socket started\n>>>")
 	for true {
@@ -116,6 +120,7 @@ func ConnectionHandler(conn net.Listener, nodeCtx NodeContext) NodeContext {
 	return nodeCtx
 }
 
+// SendPullRequest sends a pull request to the destination address
 func SendPullRequest(nodeCtx NodeContext, dst_addr string) {
 	ln, err := net.Dial("tcp", dst_addr)
 
@@ -128,6 +133,7 @@ func SendPullRequest(nodeCtx NodeContext, dst_addr string) {
 
 }
 
+// ReportState reports the state of the given NodeContext to the destination node
 func ReportState(nodeCtx NodeContext, dst_addr string) {
 	ln, err := net.Dial("tcp", dst_addr)
 
@@ -135,7 +141,8 @@ func ReportState(nodeCtx NodeContext, dst_addr string) {
 		fmt.Println("error connecting to " + dst_addr)
 		fmt.Println(err)
 	} else {
-		outString := fmt.Sprintf("%s:%s,%d,%d\n", nodeCtx.hostname, nodeCtx.port, GetValue(nodeCtx), GetTs(nodeCtx))
+		outString := fmt.Sprintf("%s:%s,%d,%d\n", nodeCtx.hostname, nodeCtx.port, GetValue(nodeCtx),
+			GetTs(nodeCtx))
 		for address, data := range nodeCtx.Nodes {
 			str := fmt.Sprintf("%s,%d,%d\n", address, data.Data, data.Ts)
 			outString = outString + str
@@ -145,6 +152,7 @@ func ReportState(nodeCtx NodeContext, dst_addr string) {
 	}
 }
 
+// RandomPull sends a random pull request
 func RandomPull(nodeCtx NodeContext) {
 	for true {
 		addresses := reflect.ValueOf(nodeCtx.Nodes).MapKeys()
@@ -156,6 +164,7 @@ func RandomPull(nodeCtx NodeContext) {
 
 }
 
+// RandNum A simple random number generator
 func RandNum(min int, max int) int {
 	rand.Seed(time.Now().UnixNano())
 	return rand.Intn(max - min + 1) + min
