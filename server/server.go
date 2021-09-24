@@ -23,6 +23,7 @@ const (
 	PULL = "pull"
 )
 
+// NodeContext contains all the required info of a server in the network
 type NodeContext struct {
 	hostname string
 	port string
@@ -134,12 +135,21 @@ func ConnectionHandler(conn net.Listener, nodeCtx NodeContext) NodeContext {
 
 			ts, err := strconv.ParseInt(timestamp, 10, 64)
 
+			// Ignore updates from the "future"
+			if ts > time.Now().UnixNano() {
+				continue
+			}
+
 			if err != nil {
 				fmt.Println(err)
 			}
 
 			address := ip + ":" +port
 			if _, in := nodeCtx.Nodes[address] ; in {
+				// Ignore updates with a ts older than one we already have
+				if ts < nodeCtx.Nodes[address].GetTs() {
+					continue
+				}
 				nodeCtx.Nodes[address].SetData(val).SetTs(ts)
 			} else {
 				nodeCtx.Nodes[address] = CreatePair(val, ts)

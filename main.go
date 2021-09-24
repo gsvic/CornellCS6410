@@ -29,8 +29,8 @@ const (
 )
 
 func main() {
+	// Get the local routable IP
 	ip := server.GetLocalIP()
-	fmt.Println(ip)
 	port := flag.Int("port", server.RandNum(1024, 49151), "Port Number")
 	flag.Parse()
 
