@@ -29,10 +29,17 @@ const (
 )
 
 func main() {
-	// Get the local routable IP
-	ip := server.GetLocalIP()
+	// Parse command-line argumens
 	port := flag.Int("port", server.RandNum(1024, 49151), "Port Number")
+	localMode := flag.Bool("local", false, "Run in local mode (on localhost)")
 	flag.Parse()
+
+	var ip string
+	if *localMode {
+		ip = "localhost"
+	} else {
+		ip = server.GetLocalIP()
+	}
 
 	reader := bufio.NewReader(os.Stdin)
 
@@ -49,9 +56,8 @@ func main() {
 	fmt.Printf("Running node at %s:%s\n", ip, strPort)
 
 	// Start the ConnectionHandler
-	go server.ConnectionHandler(conn, nodeCtx)
-
-	randomPullStarted := false
+	nodeCtx.StartConnectionHandler(conn)
+	nodeCtx.StartRandomPull()
 
 	for true {
 		fmt.Print(">>>")
@@ -81,12 +87,6 @@ func main() {
 			// Fetch the new node's state
 			server.SendPullRequest(nodeCtx, ip+":"+port)
 
-			// Start the random state pull if it has not started yet
-			if !randomPullStarted {
-				go server.RandomPull(nodeCtx)
-				randomPullStarted = true
-			}
-
 		} else if input[0] == LIST_NODES {
 			server.ListNodes(nodeCtx, false)
 		} else if input[0] == LIST_NODES_DEBUG {
@@ -98,13 +98,12 @@ func main() {
 			fmt.Printf("%s:%s --> %d\n", ip, strPort, nodeCtx.GetData().GetData())
 		} else if input[0] ==  DATA {
 			fmt.Printf("My Data -> %d\n", nodeCtx.GetData().GetData())
-		}
-
-		if strings.ToLower(input) == "exit" {
+		} else if strings.ToLower(input) == "exit" {
 			conn.Close()
 			fmt.Println("Bye!")
 			return
+		} else {
+			fmt.Printf("Invalid argument: %s\n", input)
 		}
-
 	}
 }
