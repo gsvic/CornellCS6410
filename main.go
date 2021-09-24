@@ -16,7 +16,6 @@ import (
 )
 
 const (
-	CONN_HOST = "localhost"
 	CONN_TYPE = "tcp"
 
 	DATA     = 'd'
@@ -30,22 +29,24 @@ const (
 )
 
 func main() {
+	ip := server.GetLocalIP()
+	fmt.Println(ip)
 	port := flag.Int("port", server.RandNum(1024, 49151), "Port Number")
 	flag.Parse()
 
 	reader := bufio.NewReader(os.Stdin)
 
 	strPort := strconv.Itoa(*port)
-	conn, err := net.Listen(CONN_TYPE, CONN_HOST+":"+strPort)
+	conn, err := net.Listen(CONN_TYPE, ip+":"+strPort)
 	for err != nil {
 		strPort = strconv.Itoa(server.RandNum(1024, 49151))
-		conn, err = net.Listen(CONN_TYPE, CONN_HOST+":"+strPort)
+		conn, err = net.Listen(CONN_TYPE, ip+":"+strPort)
 	}
 
 	// Initialize the Node Context
-	nodeCtx := server.CreateNodeContext(CONN_HOST, strPort)
+	nodeCtx := server.CreateNodeContext(ip, strPort)
 
-	fmt.Printf("Running node at %s:%s\n", CONN_HOST, strPort)
+	fmt.Printf("Running node at %s:%s\n", ip, strPort)
 
 	// Start the ConnectionHandler
 	go server.ConnectionHandler(conn, nodeCtx)
@@ -69,14 +70,13 @@ func main() {
 
 			addr := ip + ":" + port
 
-			if _, exists := nodeCtx.Blacklist[addr]; exists && nodeCtx.Blacklist[addr] {
+			if nodeCtx.IsBlackListed(addr) {
 				fmt.Printf("Oops! Node %s is in blacklisted\n", addr)
 				continue
 			}
 
 			fmt.Printf("Node added[ip=%s, port=%s]\n", ip, port)
 			nodeCtx.Nodes[input[1:]] = server.CreatePair(0, 0)
-			nodeCtx.Blacklist[input[1:]] = false
 
 			// Fetch the new node's state
 			server.SendPullRequest(nodeCtx, ip+":"+port)
@@ -95,7 +95,7 @@ func main() {
 			nodeCtx.SetMalicious()
 		} else if data, err := strconv.Atoi(input); err == nil {
 			nodeCtx.GetData().SetData(data).SetTs(time.Now().Unix())
-			fmt.Printf("%s:%s --> %d\n", CONN_HOST, strPort, nodeCtx.GetData().GetData())
+			fmt.Printf("%s:%s --> %d\n", ip, strPort, nodeCtx.GetData().GetData())
 		} else if input[0] ==  DATA {
 			fmt.Printf("My Data -> %d\n", nodeCtx.GetData().GetData())
 		}

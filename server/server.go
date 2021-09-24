@@ -13,8 +13,14 @@ import (
 )
 
 const (
-	PULL = "pull"
+	// BUFFER_SIZE The node's buffer size
+	BUFFER_SIZE=4096
+
+	// RANDOM_PULL_FREQUENCY defines how frequently a node will pull
+	// the state from a random node
 	RANDOM_PULL_FREQUENCY = 3 * time.Second
+
+	PULL = "pull"
 )
 
 type NodeContext struct {
@@ -22,19 +28,17 @@ type NodeContext struct {
 	port string
 	data *Pair
 	Nodes map[string]*Pair
-	Blacklist map[string]bool
+	blacklist map[string]bool
 	malicious *bool
 
 	nodesMutex sync.Mutex
 	blackListMutex sync.Mutex
-
-	N int
 }
 
 // CreateNodeContext Creates a new NodeContext
 func CreateNodeContext(hostname string, port string) NodeContext {
 	return NodeContext{hostname: hostname, port: port, data:new(Pair), Nodes:make(map[string]*Pair),
-		Blacklist:make(map[string]bool), malicious: new(bool)}
+		blacklist:make(map[string]bool), malicious: new(bool)}
 }
 
 func (nodeCtx *NodeContext) GetData() *Pair {
@@ -47,6 +51,17 @@ func (ctx NodeContext) isMalicious() bool {
 
 func (ctx NodeContext) SetMalicious() {
 	*ctx.malicious = true
+}
+
+func (ctx NodeContext) IsBlackListed(address string) bool {
+	if _, exists := ctx.blacklist[address]; exists && ctx.blacklist[address] {
+		return true
+	}
+	return false
+}
+
+func (ctx NodeContext) AddToBlackList(address string) {
+	ctx.blacklist[address] = true
 }
 
 // ListNodes prints all the nodes of the given NodeContext instance to stdout
@@ -77,7 +92,7 @@ func ConnectionHandler(conn net.Listener, nodeCtx NodeContext) NodeContext {
 			os.Exit(1)
 		}
 
-		buf := make([]byte, 1024)
+		buf := make([]byte, BUFFER_SIZE)
 
 		_, err = response.Read(buf)
 		if err != nil {
@@ -143,7 +158,7 @@ func SendPullRequest(nodeCtx NodeContext, dst_addr string) {
 		fmt.Println(err)
 
 		// Put the address to the blacklist in case of failure
-		nodeCtx.Blacklist[dst_addr] = true
+		nodeCtx.blacklist[dst_addr] = true
 		delete(nodeCtx.Nodes, dst_addr)
 	} else {
 		fmt.Fprintf(ln, "pull:%s:%s\n", nodeCtx.hostname, nodeCtx.port)
@@ -160,7 +175,7 @@ func ReportState(nodeCtx NodeContext, dst_addr string) {
 		fmt.Println(err)
 
 		// Put the address to the blacklist in case of failure
-		nodeCtx.Blacklist[dst_addr] = true
+		nodeCtx.blacklist[dst_addr] = true
 		delete(nodeCtx.Nodes, dst_addr)
 	} else {
 		var ts int64
@@ -206,4 +221,21 @@ func RandomPull(nodeCtx NodeContext) {
 func RandNum(min int, max int) int {
 	rand.Seed(time.Now().UnixNano())
 	return rand.Intn(max - min + 1) + min
+}
+
+// GetLocalIP returns the non loopback local IP of the host
+func GetLocalIP() string {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return ""
+	}
+	for _, address := range addrs {
+		// check the address type and if it is not a loopback the display it
+		if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+			if ipnet.IP.To4() != nil {
+				return ipnet.IP.String()
+			}
+		}
+	}
+	return ""
 }
