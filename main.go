@@ -81,8 +81,7 @@ func main() {
 				continue
 			}
 
-			fmt.Printf("Node added[ip=%s, port=%s]\n", ip, port)
-			nodeCtx.Nodes[input[1:]] = server.CreatePair(0, 0)
+			nodeCtx.UpdateNode(addr, 0, 0)
 
 			// Fetch the new node's state
 			server.SendPullRequest(nodeCtx, ip+":"+port)
