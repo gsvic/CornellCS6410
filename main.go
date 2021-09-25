@@ -2,7 +2,6 @@ package main
 
 import (
 	"cs6410/gossip/server"
-	"regexp"
 	"time"
 )
 
@@ -30,12 +29,6 @@ const (
 )
 
 func main() {
-	pattern := `^pull:([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|\w+):[0-9]{1,5}$`
-	//pattern := `^([0-9]{1,3}\.[0-9]{1,3}|[a-z]+)$`
-	//matched, _ := regexp.MatchString(pattern, "pull:192.133.2.2:7777")
-	matched, _ := regexp.MatchString(pattern, "pull:localhost:98")
-
-	fmt.Println(matched)
 	// Parse command-line argumens
 	port := flag.Int("port", server.RandNum(1024, 49151), "Port Number")
 	localMode := flag.Bool("local", false, "Run in local mode (on localhost)")

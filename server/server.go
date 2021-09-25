@@ -246,8 +246,7 @@ func SendPullRequest(nodeCtx NodeContext, dst_addr string) {
 	ln, err := net.Dial("tcp", dst_addr)
 
 	if err != nil {
-		fmt.Printf("error connecting to %s\n", dst_addr)
-
+		//fmt.Printf("error connecting to %s\n", dst_addr)
 		s := strings.Split(dst_addr, ":")
 		ip := s[0]
 		port := s[1]
@@ -264,9 +263,8 @@ func SendPullRequest(nodeCtx NodeContext, dst_addr string) {
 // ReportState reports the state of the given NodeContext to the destination node
 func ReportState(nodeCtx NodeContext, dst_addr string) {
 	ln, err := net.Dial("tcp", dst_addr)
-
 	if err != nil {
-		fmt.Printf("error connecting to %s\n", dst_addr)
+		//fmt.Printf("error connecting to %s\n", dst_addr)
 
 		s := strings.Split(dst_addr, ":")
 		ip := s[0]
