@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -46,13 +47,18 @@ func (nodeCtx *NodeContext) GetData() *Pair {
 }
 
 // isMalicious tells if that node runs in malicious mode
-func (nodeCtx NodeContext) isMalicious() bool {
+func (nodeCtx NodeContext) IsMalicious() bool {
 	return *nodeCtx.malicious
 }
 
-// SetMalicious turns malicious mode on
-func (nodeCtx NodeContext) SetMalicious() {
+// TurnMaliciousOn turns malicious mode on
+func (nodeCtx NodeContext) TurnMaliciousOn() {
 	*nodeCtx.malicious = true
+}
+
+// TurnMaliciousOff turns malicious mode on
+func (nodeCtx NodeContext) TurnMaliciousOff() {
+	*nodeCtx.malicious = false
 }
 
 // IsBlackListed Checks if the given address is in the black list
@@ -70,19 +76,26 @@ func (nodeCtx NodeContext) AddToBlackList(address string) {
 
 // UpdateNode update the node of the given address.
 // If we see this node for a first time, we add it to the map
-func (nodeCtx *NodeContext) UpdateNode(address string, data int, ts int64) {
+func (nodeCtx *NodeContext) UpdateNode(address string, data int, ts int64) bool {
 	ip := strings.Split(address, ":")[0]
 	port := strings.Split(address, ":")[1]
+
+	reportChange := false
 
 	// We have seen this ip
 	if _, seenIP := nodeCtx.nodes[ip] ; seenIP {
 		// We have seen this port - Just update this node
 		if _, seenPort := nodeCtx.nodes[ip][port] ; seenPort {
-			nodeCtx.nodes[ip][port].SetData(data).SetTs(ts)
+			// Report the change
+			if data != nodeCtx.nodes[ip][port].GetData() && ts != nodeCtx.nodes[ip][port].GetTs() {
+				reportChange = true
+				nodeCtx.nodes[ip][port].SetData(data).SetTs(ts)
+			}
 		} else {
 			numPorts := len(nodeCtx.nodes[ip])
 			if numPorts < MAX_IPS_PER_NODE {
 				nodeCtx.nodes[ip][port] = CreatePair(data, ts)
+				reportChange = true
 			} else {
 				// We reached the maximum number of ports for that IP
 				// We need to keep the most recent ones
@@ -102,6 +115,7 @@ func (nodeCtx *NodeContext) UpdateNode(address string, data int, ts int64) {
 					delete(nodeCtx.nodes[ip], minPort)
 					// Add the new node
 					nodeCtx.nodes[ip][port] = CreatePair(data, ts)
+					reportChange = true
 				}
 			}
 		}
@@ -109,7 +123,10 @@ func (nodeCtx *NodeContext) UpdateNode(address string, data int, ts int64) {
 		// We haven't seen this IP, so let's add it
 		nodeCtx.nodes[ip] = make(map[string]*Pair)
 		nodeCtx.nodes[ip][port] = CreatePair(data, ts)
+		reportChange = true
 	}
+
+	return reportChange
 }
 
 // ListNodes prints all the nodes of the given NodeContext instance to stdout
@@ -151,13 +168,26 @@ func (nodeCtx *NodeContext) connectionHandler(conn net.Listener){
 			continue
 		}
 
-		strBuf := string(buf)
+		// Trim WhiteSpace
+		strBuf := strings.TrimSpace(string(buf))
+
+		pullPattern :=  `^pull:([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|\w+):[0-9]{1,5}$`
+		nodePattern := `^([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|\w+):[0-9]{1,5},\d+,\d+?`
+
+		// Check the first line
+		split := strings.Split(strBuf, "\n")
+		if len(split) < 1 {
+			return
+		}
+
+		pullPatternMatch, _ := regexp.MatchString(pullPattern, split[0])
+		nodePatternMatch, _ := regexp.MatchString(nodePattern, split[0])
 
 		// We received a pull request
-		if strings.Contains(strBuf, PULL) {
-			split := strings.Split(strBuf, ":")
-			ip := split[1]
-			port := strings.Split(split[2], "\n")[0]
+		if pullPatternMatch {
+			s := strings.Split(split[0], ":")
+			ip := s[1]
+			port := strings.Split(s[2], "\n")[0]
 			ReportState(*nodeCtx, fmt.Sprintf("%s:%s", ip, port))
 
 			// No need to process further after we report the state
@@ -165,9 +195,14 @@ func (nodeCtx *NodeContext) connectionHandler(conn net.Listener){
 		}
 
 		nodes := strings.Split(string(buf), "\n")
-		nodes = nodes[:len(nodes)-1]
+		//nodes = nodes[:256]
 
 		for _, node := range nodes {
+			nodePatternMatch, _ = regexp.MatchString(nodePattern, node)
+			if !nodePatternMatch {
+				continue
+			}
+
 			csv := strings.Split(node, ",")
 
 			ip := strings.Split(csv[0], ":")[0]
@@ -199,7 +234,9 @@ func (nodeCtx *NodeContext) connectionHandler(conn net.Listener){
 			}
 
 			address := ip + ":" +port
-			nodeCtx.UpdateNode(address, val, ts)
+			if nodeCtx.UpdateNode(address, val, ts) {
+				fmt.Printf("\n%s --> %d\n>>>", address, val)
+			}
 		}
 	}
 }
@@ -209,8 +246,7 @@ func SendPullRequest(nodeCtx NodeContext, dst_addr string) {
 	ln, err := net.Dial("tcp", dst_addr)
 
 	if err != nil {
-		fmt.Println("error connecting to " + dst_addr)
-		fmt.Println(err)
+		fmt.Printf("error connecting to %s\n", dst_addr)
 
 		s := strings.Split(dst_addr, ":")
 		ip := s[0]
@@ -230,8 +266,7 @@ func ReportState(nodeCtx NodeContext, dst_addr string) {
 	ln, err := net.Dial("tcp", dst_addr)
 
 	if err != nil {
-		fmt.Println("error connecting to " + dst_addr)
-		fmt.Println(err)
+		fmt.Printf("error connecting to %s\n", dst_addr)
 
 		s := strings.Split(dst_addr, ":")
 		ip := s[0]
@@ -243,18 +278,21 @@ func ReportState(nodeCtx NodeContext, dst_addr string) {
 	} else {
 		var ts int64
 
-		if nodeCtx.isMalicious() {
+		var outString string
+		if nodeCtx.IsMalicious() {
 			ts = 0
+			outString = fmt.Sprintf("dfadfadfasfdadfkadfhadkfadahjkfhjkahdjfahkjdfajh\n",
+				nodeCtx.hostname, nodeCtx.port, nodeCtx.GetData().GetData(),
+				ts)
 		} else {
 			ts = nodeCtx.GetData().GetTs()
+			outString = fmt.Sprintf("%s:%s,%d,%d\n", nodeCtx.hostname, nodeCtx.port, nodeCtx.GetData().GetData(),
+				ts)
 		}
-
-		outString := fmt.Sprintf("%s:%s,%d,%d\n", nodeCtx.hostname, nodeCtx.port, nodeCtx.GetData().GetData(),
-			ts)
 
 		for ip, port := range nodeCtx.nodes {
 			for p, data := range port {
-				if nodeCtx.isMalicious() {
+				if nodeCtx.IsMalicious() {
 					ts = time.Date(20100, 1, 1, 1, 1, 1, 1, time.Local).UnixNano()
 				} else {
 					ts = nodeCtx.GetData().GetTs()
@@ -278,12 +316,14 @@ func (nodeCtx *NodeContext) randomPull() {
 			randomIp := ips[randomIpIdx].String()
 
 			ports := reflect.ValueOf(nodeCtx.nodes[randomIp]).MapKeys()
-			randomPortId := rand.Intn(len(ports))
-			randomPort := ports[randomPortId].String()
+			if len(ports) > 0 {
+				randomPortId := rand.Intn(len(ports))
+				randomPort := ports[randomPortId].String()
 
-			randomAddress := randomIp + ":" + randomPort
+				randomAddress := randomIp + ":" + randomPort
 
-			SendPullRequest(*nodeCtx, randomAddress)
+				SendPullRequest(*nodeCtx, randomAddress)
+			}
 		}
 		time.Sleep(RANDOM_PULL_FREQUENCY)
 	}

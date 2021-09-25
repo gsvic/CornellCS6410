@@ -2,6 +2,7 @@ package main
 
 import (
 	"cs6410/gossip/server"
+	"regexp"
 	"time"
 )
 
@@ -29,6 +30,12 @@ const (
 )
 
 func main() {
+	pattern := `^pull:([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|\w+):[0-9]{1,5}$`
+	//pattern := `^([0-9]{1,3}\.[0-9]{1,3}|[a-z]+)$`
+	//matched, _ := regexp.MatchString(pattern, "pull:192.133.2.2:7777")
+	matched, _ := regexp.MatchString(pattern, "pull:localhost:98")
+
+	fmt.Println(matched)
 	// Parse command-line argumens
 	port := flag.Int("port", server.RandNum(1024, 49151), "Port Number")
 	localMode := flag.Bool("local", false, "Run in local mode (on localhost)")
@@ -91,7 +98,13 @@ func main() {
 		} else if input[0] == LIST_NODES_DEBUG {
 			server.ListNodes(nodeCtx, true)
 		} else if input[0] == ENABLE_MALICIOUS_MODE {
-			nodeCtx.SetMalicious()
+			if nodeCtx.IsMalicious() {
+				nodeCtx.TurnMaliciousOff()
+				fmt.Println("Adversarial Mode: OFF")
+			} else {
+				nodeCtx.TurnMaliciousOn()
+				fmt.Println("Adversarial Mode: ON")
+			}
 		} else if data, err := strconv.Atoi(input); err == nil {
 			nodeCtx.GetData().SetData(data).SetTs(time.Now().Unix())
 			fmt.Printf("%s:%s --> %d\n", ip, strPort, nodeCtx.GetData().GetData())
